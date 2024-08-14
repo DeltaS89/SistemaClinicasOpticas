@@ -1,0 +1,182 @@
+﻿@page "/examenes"
+
+@inject ApiService ApiService
+
+@using AppAndroid.Components.Model
+@using AppAndroid.Components.Services
+
+<h3>Gestión de Examenes</h3>
+
+<!-- Notificación -->
+@if (showNotification)
+{
+    <div class="alert alert-@NotificationType alert-dismissible fade show" role="alert">
+        @NotificationMessage
+        <button type="button" class="btn-close" aria-label="Close" @onclick="CloseNotification"></button>
+    </div>
+}
+
+<!-- Formulario para agregar o editar exámenes -->
+<div class="row">
+    <div class="col-md-6">
+        <EditForm Model="@newExamen" OnValidSubmit="GuardarExamen">
+            <div class="mb-3">
+                <label for="fecha" class="form-label">Fecha</label>
+                <InputDate id="fecha" class="form-control" @bind-Value="newExamen.Fecha" />
+            </div>
+            <div class="mb-3">
+                <label for="resultado" class="form-label">Resultado</label>
+                <InputText id="resultado" class="form-control" @bind-Value="newExamen.Resultado" />
+            </div>
+            <div class="mb-3">
+                <label for="paciente" class="form-label">Paciente</label>
+                <InputSelect id="paciente" class="form-control" @bind-Value="newExamen.PacienteId">
+                    <option value="">Seleccione un paciente</option>
+                    @foreach (var paciente in pacientes)
+                    {
+                        <option value="@paciente.Id">@paciente.Nombre @paciente.Apellido</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="mb-3">
+                <label for="doctor" class="form-label">Doctor</label>
+                <InputSelect id="doctor" class="form-control" @bind-Value="newExamen.DoctorId">
+                    <option value="">Seleccione un doctor</option>
+                    @foreach (var doctor in doctores)
+                    {
+                        <option value="@doctor.Id">@doctor.Nombre</option>
+                    }
+                </InputSelect>
+            </div>
+            <button type="submit" class="btn btn-primary">@guardarButtonLabel</button>
+        </EditForm>
+    </div>
+</div>
+
+<!-- Listado de Exámenes en formato de tarjetas -->
+<div class="row mt-4">
+    @foreach (var examen in examenes)
+    {
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Examen @examen.Id</h5>
+                    <h6 class="card-subtitle mb-2 text-muted">Fecha: @examen.Fecha.ToString("dd/MM/yyyy")</h6>
+                    <p class="card-text">
+                        Resultado: @examen.Resultado<br />
+                        Paciente: @pacientes.FirstOrDefault(p => p.Id == examen.PacienteId)?.Nombre @pacientes.FirstOrDefault(p => p.Id == examen.PacienteId)?.Apellido<br />
+                        Doctor: @doctores.FirstOrDefault(d => d.Id == examen.DoctorId)?.Nombre
+                    </p>
+                    <div class="d-flex">
+                        <button class="btn btn-primary btn-sm me-2" @onclick="() => EditExamen(examen)">Editar</button>
+                        <button class="btn btn-danger btn-sm" @onclick="() => DeleteExamen(examen)">Eliminar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Examen> examenes = new List<Examen>();
+    private List<Paciente> pacientes = new List<Paciente>();
+    private List<Doctor> doctores = new List<Doctor>();
+    private Examen newExamen = new Examen();
+    private string guardarButtonLabel = "Guardar Examen";
+    private string NotificationMessage = string.Empty;
+    private string NotificationType = "success"; // "success", "danger", "warning", etc.
+    private bool showNotification = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        examenes = await ApiService.GetExamenesAsync();
+        pacientes = await ApiService.GetPacientesAsync();
+        doctores = await ApiService.GetDoctoresAsync();
+    }
+
+    private async Task GuardarExamen()
+    {
+        if (newExamen.Id == 0) // Si el ID es 0, es un nuevo examen
+        {
+            var result = await ApiService.AgregarExamenAsync(newExamen);
+            if (result)
+            {
+                examenes.Add(newExamen);
+                newExamen = new Examen(); // Limpiar el formulario
+                ShowNotification("Examen agregado exitosamente.", "success");
+            }
+            else
+            {
+                ShowNotification("Error al agregar el examen.", "danger");
+            }
+        }
+        else // Si el ID es diferente de 0, estamos editando un examen existente
+        {
+            var result = await ApiService.ModificarExamenAsync(newExamen);
+            if (result)
+            {
+                var index = examenes.FindIndex(e => e.Id == newExamen.Id);
+                if (index >= 0)
+                {
+                    examenes[index] = newExamen;
+                }
+                newExamen = new Examen(); // Limpiar el formulario después de editar
+                ShowNotification("Examen actualizado exitosamente.", "success");
+            }
+            else
+            {
+                ShowNotification("Error al actualizar el examen.", "danger");
+            }
+        }
+
+        guardarButtonLabel = "Guardar Examen"; // Restablecer el botón de guardar a su estado original
+    }
+
+    private void EditExamen(Examen examen)
+    {
+        // Cargar el examen en el formulario para editarlo
+        newExamen = new Examen
+            {
+                Id = examen.Id,
+                Fecha = examen.Fecha,
+                Resultado = examen.Resultado,
+                PacienteId = examen.PacienteId,
+                DoctorId = examen.DoctorId
+            };
+        guardarButtonLabel = "Actualizar Examen"; // Cambiar la etiqueta del botón de guardar para indicar que estamos en modo de edición
+    }
+
+    private async Task DeleteExamen(Examen examen)
+    {
+        var result = await ApiService.EliminarExamenAsync(examen.Id);
+        if (result)
+        {
+            examenes.Remove(examen);
+            ShowNotification("Examen eliminado exitosamente.", "success");
+        }
+        else
+        {
+            ShowNotification("Error al eliminar el examen.", "danger");
+        }
+    }
+
+    private void ShowNotification(string message, string type)
+    {
+        NotificationMessage = message;
+        NotificationType = type;
+        showNotification = true;
+
+        // Ocultar la notificación después de 5 segundos
+        Task.Delay(5000).ContinueWith(_ =>
+        {
+            CloseNotification();
+            InvokeAsync(StateHasChanged); // Forzar el redibujado de la UI
+        });
+    }
+
+    private void CloseNotification()
+    {
+        showNotification = false;
+        NotificationMessage = string.Empty;
+    }
+}

@@ -1,0 +1,150 @@
+﻿@page "/"
+
+@inject ApiService ApiService
+@inject IJSRuntime JS
+@using AppAndroid.Components.Model
+@using AppAndroid.Components.Services
+
+<h3>Dashboard de Gestión</h3>
+
+<div class="container">
+    <!-- Fila para la tabla de totales -->
+    <div class="row mb-4">
+        <div class="col">
+            <table class="table table-sm table-striped text-center">
+                <thead>
+                    <tr>
+                        <th>Total de Pacientes</th>
+                        <th>Total de Doctores</th>
+                        <th>Total de Exámenes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>@totalPacientes</td>
+                        <td>@totalDoctores</td>
+                        <td>@totalExamenes</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Fila para los gráficos -->
+    <div class="row">
+        <div class="col-md-6 text-center">
+            <h4>Pacientes por Doctor</h4>
+            <canvas id="patientsByDoctorCanvas" width="200" height="200"></canvas>
+            <div id="patientsByDoctorCanvasLegend" class="mt-2"></div>
+        </div>
+        <div class="col-md-6 text-center">
+            <h4>Pacientes por Exámenes</h4>
+            <canvas id="patientsByExamsCanvas" width="200" height="200"></canvas>
+            <div id="patientsByExamsCanvasLegend" class="mt-2"></div>
+        </div>
+    </div>
+</div>
+
+
+    <script>
+    function drawPieChart(canvasId, data) {
+        const canvas = document.getElementById(canvasId);
+        const context = canvas.getContext('2d');
+        const total = data.reduce((sum, item) => sum + item.count, 0);
+        let startAngle = 0;
+
+        // Generar y almacenar los colores
+        const colors = data.map(() => getRandomColor());
+
+        data.forEach((d, index) => {
+            const sliceAngle = 2 * Math.PI * d.count / total;
+
+            context.beginPath();
+            context.moveTo(100, 100); // Cambiado para el tamaño del canvas 200x200
+            context.arc(100, 100, 100, startAngle, startAngle + sliceAngle); // Cambiado para el tamaño del canvas 200x200
+            context.closePath();
+
+            context.fillStyle = colors[index];  // Usar el color almacenado
+            context.fill();
+
+            startAngle += sliceAngle;
+        });
+
+        // Generar la leyenda usando los colores almacenados
+        generateLegend(canvasId, data, colors);
+    }
+
+    function getRandomColor() {
+        return '#' + Math.floor(Math.random() * 16777215).toString(16);
+    }
+
+    function generateLegend(canvasId, data, colors) {
+        const legendContainer = document.getElementById(`${canvasId}Legend`);
+        legendContainer.innerHTML = '';
+        data.forEach((d, index) => {
+            const legendItem = document.createElement('div');
+            legendItem.style.display = 'flex';
+            legendItem.style.alignItems = 'center';
+            legendItem.style.marginBottom = '5px';
+
+            const colorBox = document.createElement('span');
+            colorBox.style.display = 'inline-block';
+            colorBox.style.width = '20px';
+            colorBox.style.height = '20px';
+            colorBox.style.backgroundColor = colors[index];  // Usar el color almacenado
+            colorBox.style.marginRight = '10px';
+
+            const label = document.createElement('span');
+            label.textContent = `${d.name}: ${d.count}`;
+
+            legendItem.appendChild(colorBox);
+            legendItem.appendChild(label);
+
+            legendContainer.appendChild(legendItem);
+        });
+    }
+
+    function renderCharts(patientsByDoctor, patientsByExams) {
+        drawPieChart('patientsByDoctorCanvas', patientsByDoctor);
+        drawPieChart('patientsByExamsCanvas', patientsByExams);
+    }
+
+    </script>
+
+
+
+@code {
+    private int totalPacientes;
+    private int totalDoctores;
+    private int totalExamenes;
+    private List<dynamic> patientsByDoctor = new List<dynamic>();
+    private List<dynamic> patientsByExams = new List<dynamic>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Obteniendo todos los datos
+        var pacientes = await ApiService.GetPacientesAsync();
+        var doctores = await ApiService.GetDoctoresAsync();
+        var examenes = await ApiService.GetExamenesAsync();
+
+        // Contando los totales
+        totalPacientes = pacientes.Count;
+        totalDoctores = doctores.Count;
+        totalExamenes = examenes.Count;
+
+        // Mapeando datos para los gráficos
+        patientsByDoctor = examenes.GroupBy(e => e.DoctorId)
+                                  .Select(g => new { name = doctores.First(d => d.Id == g.Key).Nombre, count = g.Count() })
+                                  .Cast<dynamic>()
+                                  .ToList();
+
+        patientsByExams = examenes.GroupBy(e => e.PacienteId)
+                                  .Select(g => new { name = $"Paciente {g.Key}", count = g.Count() })
+                                  .Cast<dynamic>()
+                                  .ToList();
+
+        // Renderizando gráficos llamando a la función JavaScript desde C#
+        await JS.InvokeVoidAsync("renderCharts", patientsByDoctor, patientsByExams);
+    }
+}
+

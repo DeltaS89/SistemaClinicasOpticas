@@ -1,0 +1,153 @@
+﻿@page "/doctores"
+
+@inject ApiService ApiService
+
+
+@using AppAndroid.Components.Model
+@using AppAndroid.Components.Services
+
+
+<h3>Gestión de Doctores</h3>
+
+<!-- Notificación -->
+@if (showNotification)
+{
+    <div class="alert alert-@NotificationType alert-dismissible fade show" role="alert">
+        @NotificationMessage
+        <button type="button" class="btn-close" aria-label="Close" @onclick="CloseNotification"></button>
+    </div>
+}
+
+<!-- Formulario para agregar o editar doctores -->
+<div class="row">
+    <div class="col-md-6">
+        <EditForm Model="@newDoctor" OnValidSubmit="GuardarDoctor">
+            <div class="mb-3">
+                <label for="nombre" class="form-label">Nombre</label>
+                <InputText id="nombre" class="form-control" @bind-Value="newDoctor.Nombre" />
+            </div>
+            <div class="mb-3">
+                <label for="especialidad" class="form-label">Especialidad</label>
+                <InputText id="especialidad" class="form-control" @bind-Value="newDoctor.Especialidad" />
+            </div>
+            <button type="submit" class="btn btn-primary">@guardarButtonLabel</button>
+        </EditForm>
+    </div>
+</div>
+
+<!-- Listado de Doctores en formato de tarjetas -->
+<div class="row mt-4">
+    @foreach (var doctor in doctores)
+    {
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">@doctor.Nombre</h5>
+                    <h6 class="card-subtitle mb-2 text-muted">@doctor.Especialidad</h6>
+                    <div class="d-flex">
+                        <button class="btn btn-primary btn-sm me-2" @onclick="() => EditDoctor(doctor)">Editar</button>
+                        <button class="btn btn-danger btn-sm" @onclick="() => DeleteDoctor(doctor)">Eliminar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Doctor> doctores = new List<Doctor>();
+    private Doctor newDoctor = new Doctor();
+    private string guardarButtonLabel = "Guardar Doctor";
+    private string NotificationMessage = string.Empty;
+    private string NotificationType = "success"; // "success", "danger", "warning", etc.
+    private bool showNotification = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        doctores = await ApiService.GetDoctoresAsync();
+    }
+
+    private async Task GuardarDoctor()
+    {
+        if (newDoctor.Id == 0) // Si el ID es 0, es un nuevo doctor
+        {
+            var result = await ApiService.AgregarDoctorAsync(newDoctor);
+            if (result)
+            {
+                doctores.Add(newDoctor);
+                newDoctor = new Doctor(); // Limpiar el formulario
+                ShowNotification("Doctor agregado exitosamente.", "success");
+            }
+            else
+            {
+                ShowNotification("Error al agregar el doctor.", "danger");
+            }
+        }
+        else // Si el ID es diferente de 0, estamos editando un doctor existente
+        {
+            var result = await ApiService.ModificarDoctorAsync(newDoctor);
+            if (result)
+            {
+                var index = doctores.FindIndex(d => d.Id == newDoctor.Id);
+                if (index >= 0)
+                {
+                    doctores[index] = newDoctor;
+                }
+                newDoctor = new Doctor(); // Limpiar el formulario después de editar
+                ShowNotification("Doctor actualizado exitosamente.", "success");
+            }
+            else
+            {
+                ShowNotification("Error al actualizar el doctor.", "danger");
+            }
+        }
+
+        guardarButtonLabel = "Guardar Doctor"; // Restablecer el botón de guardar a su estado original
+    }
+
+    private void EditDoctor(Doctor doctor)
+    {
+        // Cargar el doctor en el formulario para editarlo
+        newDoctor = new Doctor
+            {
+                Id = doctor.Id,
+                Nombre = doctor.Nombre,
+                Especialidad = doctor.Especialidad
+            };
+        guardarButtonLabel = "Actualizar Doctor"; // Cambiar la etiqueta del botón de guardar para indicar que estamos en modo de edición
+    }
+
+    private async Task DeleteDoctor(Doctor doctor)
+    {
+        var result = await ApiService.EliminarDoctorAsync(doctor.Id);
+        if (result)
+        {
+            doctores.Remove(doctor);
+            ShowNotification("Doctor eliminado exitosamente.", "success");
+        }
+        else
+        {
+            ShowNotification("Error al eliminar el doctor.", "danger");
+        }
+    }
+
+    private void ShowNotification(string message, string type)
+    {
+        NotificationMessage = message;
+        NotificationType = type;
+        showNotification = true;
+
+        // Ocultar la notificación después de 5 segundos
+        Task.Delay(3000).ContinueWith(_ =>
+        {
+            CloseNotification();
+            InvokeAsync(StateHasChanged); // Forzar el redibujado de la UI
+        });
+    }
+
+    private void CloseNotification()
+    {
+        showNotification = false;
+        NotificationMessage = string.Empty;
+    }
+}

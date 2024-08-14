@@ -1,0 +1,163 @@
+﻿@page "/pacientes"
+
+@inject ApiService ApiService
+
+@using AppAndroid.Components.Model
+@using AppAndroid.Components.Services
+
+<h3>Gestión de Pacientes</h3>
+
+
+<!-- Notificación -->
+@if (showNotification)
+{
+    <div class="alert alert-@NotificationType alert-dismissible fade show" role="alert">
+        @NotificationMessage
+        <button type="button" class="btn-close" aria-label="Close" @onclick="CloseNotification"></button>
+    </div>
+}
+
+<!-- Formulario para agregar o editar pacientes -->
+<div class="row">
+    <div class="col-md-6">
+        <EditForm Model="@newPaciente" OnValidSubmit="GuardarPaciente">
+            <div class="mb-3">
+                <label for="nombre" class="form-label">Nombre</label>
+                <InputText id="nombre" class="form-control" @bind-Value="newPaciente.Nombre" />
+            </div>
+            <div class="mb-3">
+                <label for="apellido" class="form-label">Apellido</label>
+                <InputText id="apellido" class="form-control" @bind-Value="newPaciente.Apellido" />
+            </div>
+            <div class="mb-3">
+                <label for="direccion" class="form-label">Dirección</label>
+                <InputText id="direccion" class="form-control" @bind-Value="newPaciente.Direccion" />
+            </div>
+            <div class="mb-3">
+                <label for="telefono" class="form-label">Teléfono</label>
+                <InputText id="telefono" class="form-control" @bind-Value="newPaciente.Telefono" />
+            </div>
+            <button type="submit" class="btn btn-primary">@guardarButtonLabel</button>
+        </EditForm>
+    </div>
+</div>
+
+<!-- Listado de Pacientes en formato de tarjetas -->
+<div class="row mt-4">
+    @foreach (var paciente in pacientes)
+    {
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">@paciente.Nombre @paciente.Apellido</h5>
+                    <h6 class="card-subtitle mb-2 text-muted">Teléfono: @paciente.Telefono</h6>
+                    <p class="card-text">Dirección: @paciente.Direccion</p>
+                    <div class="d-flex">
+                        <button class="btn btn-primary btn-sm me-2" @onclick="() => EditPaciente(paciente)">Editar</button>
+                        <button class="btn btn-danger btn-sm" @onclick="() => DeletePaciente(paciente)">Eliminar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Paciente> pacientes = new List<Paciente>();
+    private Paciente newPaciente = new Paciente();
+    private string guardarButtonLabel = "Guardar Paciente";
+    private string NotificationMessage = string.Empty;
+    private string NotificationType = "success"; // "success", "danger", "warning", etc.
+    private bool showNotification = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        pacientes = await ApiService.GetPacientesAsync();
+    }
+
+    private async Task GuardarPaciente()
+    {
+        if (newPaciente.Id == 0) // Si el ID es 0, es un nuevo paciente
+        {
+            var result = await ApiService.AgregarPacienteAsync(newPaciente);
+            if (result)
+            {
+                pacientes.Add(newPaciente);
+                newPaciente = new Paciente(); // Limpiar el formulario
+                ShowNotification("Paciente agregado exitosamente.", "success");
+            }
+            else
+            {
+                ShowNotification("Error al agregar el paciente.", "danger");
+            }
+        }
+        else // Si el ID es diferente de 0, estamos editando un paciente existente
+        {
+            var result = await ApiService.ModificarPacienteAsync(newPaciente);
+            if (result)
+            {
+                var index = pacientes.FindIndex(p => p.Id == newPaciente.Id);
+                if (index >= 0)
+                {
+                    pacientes[index] = newPaciente;
+                }
+                newPaciente = new Paciente(); // Limpiar el formulario después de editar
+                ShowNotification("Paciente actualizado exitosamente.", "success");
+            }
+            else
+            {
+                ShowNotification("Error al actualizar el paciente.", "danger");
+            }
+        }
+
+        guardarButtonLabel = "Guardar Paciente"; // Restablecer el botón de guardar a su estado original
+    }
+
+    private void EditPaciente(Paciente paciente)
+    {
+        // Cargar el paciente en el formulario para editarlo
+        newPaciente = new Paciente
+            {
+                Id = paciente.Id,
+                Nombre = paciente.Nombre,
+                Apellido = paciente.Apellido,
+                Direccion = paciente.Direccion,
+                Telefono = paciente.Telefono
+            };
+        guardarButtonLabel = "Actualizar Paciente"; // Cambiar la etiqueta del botón de guardar para indicar que estamos en modo de edición
+    }
+
+    private async Task DeletePaciente(Paciente paciente)
+    {
+        var result = await ApiService.EliminarPacienteAsync(paciente.Id);
+        if (result)
+        {
+            pacientes.Remove(paciente);
+            ShowNotification("Paciente eliminado exitosamente.", "success");
+        }
+        else
+        {
+            ShowNotification("Error al eliminar el paciente.", "danger");
+        }
+    }
+
+    private void ShowNotification(string message, string type)
+    {
+        NotificationMessage = message;
+        NotificationType = type;
+        showNotification = true;
+
+        // Ocultar la notificación después de 5 segundos
+        Task.Delay(5000).ContinueWith(_ =>
+        {
+            CloseNotification();
+            InvokeAsync(StateHasChanged); // Forzar el redibujado de la UI
+        });
+    }
+
+    private void CloseNotification()
+    {
+        showNotification = false;
+        NotificationMessage = string.Empty;
+    }
+}
